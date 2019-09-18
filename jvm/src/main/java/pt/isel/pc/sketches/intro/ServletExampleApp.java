@@ -41,7 +41,13 @@ public class ServletExampleApp {
                 resp.setStatus(404);
                 return;
             }
+
             long count = counter.increment();
+
+            synchronized (counter) {
+                //...
+            }
+
             // Utils.sleep(5000, TimeUnit.MILLISECONDS);
             log.info("End request processing, path = {}", req.getPathInfo());
             Utils.writeToHttpServletResponse(resp,
