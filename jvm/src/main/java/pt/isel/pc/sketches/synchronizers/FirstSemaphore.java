@@ -1,4 +1,4 @@
-package pt.isel.pc.sketches.intro;
+package pt.isel.pc.sketches.synchronizers;
 
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
@@ -23,20 +23,18 @@ public class FirstSemaphore {
                 try {
                     condition.await();
                 } catch (InterruptedException e) {
-                    /* - option 1 - give-up and propagate signal
-                     *if (availableUnits > 0) {
-                     *
-                     *   condition.signal();
-                     *}
-                     *throw e;
-                     */
-                    // - option 2
+                    // - option 1 - give-up and propagate signal
+                    if (availableUnits > 0) {
+                        condition.signal();
+                    }
+                    throw e;
+
+                    /* - option 2
                     if(availableUnits > 0) {
                         availableUnits -= 1;
                         Thread.currentThread().interrupt();
                         return;
-                    }
-                    throw e;
+                    }*/
                 }
             }
             // here we have the guarantee that availableUnits > 0
