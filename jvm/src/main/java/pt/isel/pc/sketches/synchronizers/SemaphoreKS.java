@@ -8,15 +8,22 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class SemaphoreWithFifoOrder {
+public class SemaphoreKS {
+
+    private static class Request {
+        final Condition condition;
+        boolean isDone = false;
+        Request(Lock monitor){
+            condition = monitor.newCondition();
+        }
+    }
 
     private int availableUnits;
-    private final NodeLinkedList<Thread> queue = new NodeLinkedList<>();
+    private final NodeLinkedList<Request> queue = new NodeLinkedList<>();
 
     private final Lock monitor = new ReentrantLock();
-    private final Condition condition = monitor.newCondition();
 
-    public SemaphoreWithFifoOrder(int initialUnits) {
+    public SemaphoreKS(int initialUnits) {
         this.availableUnits = initialUnits;
     }
 
@@ -33,23 +40,25 @@ public class SemaphoreWithFifoOrder {
                 return false;
             }
             // prepare to wait
-            NodeLinkedList.Node<Thread> node = queue.push(Thread.currentThread());
+            NodeLinkedList.Node<Request> requestNode = queue.push(new Request(monitor));
             long limit = Timeouts.start(timeout, timeUnit);
             long remaining = Timeouts.remaining(limit);
             while (true) {
                 try {
-                    condition.await(remaining, TimeUnit.MILLISECONDS);
+                    requestNode.value.condition.await(remaining, TimeUnit.MILLISECONDS);
                 } catch (InterruptedException e) {
-                    queue.remove(node);
-                    signalAllIfNeeded();
+                    if(requestNode.value.isDone) {
+                        Thread.currentThread().interrupt();
+                        return true;
+                    }
+                    // give-up
+                    queue.remove(requestNode);
+                    completeRequests();
                     throw e;
                 }
 
-                // is condition true
-                if (queue.isHeadNode(node) && availableUnits > 0) {
-                    availableUnits -= 1;
-                    queue.pull();
-                    signalAllIfNeeded();
+                // is request fulfilled (i.e. isDone)
+                if (requestNode.value.isDone) {
                     return true;
                 }
 
@@ -57,8 +66,8 @@ public class SemaphoreWithFifoOrder {
                 // should we continue to wait
                 if (Timeouts.isTimeout(remaining)) {
                     // giving up
-                    queue.remove(node);
-                    signalAllIfNeeded();
+                    queue.remove(requestNode);
+                    completeRequests();
                     return false;
                 }
             }
@@ -71,15 +80,18 @@ public class SemaphoreWithFifoOrder {
         monitor.lock();
         try {
             availableUnits += 1;
-            signalAllIfNeeded();
+            completeRequests();
         } finally {
             monitor.unlock();
         }
     }
 
-    private void signalAllIfNeeded() {
-        if(availableUnits > 0 && queue.isNotEmpty()) {
-            condition.signalAll();
+    private void completeRequests() {
+        while(availableUnits > 0 && queue.isNotEmpty()) {
+            NodeLinkedList.Node<Request> head = queue.pull();
+            head.value.isDone = true;
+            availableUnits -= 1;
+            head.value.condition.signal();
         }
     }
 }
