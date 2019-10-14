@@ -48,28 +48,28 @@ public class NarySemaphoreKS {
             }
 
             // prepare everything for waiting
-            NodeLinkedList.Node<Request> node = q.push(
+            NodeLinkedList.Node<Request> request = q.push(
               new Request(requestedUnits, monitor.newCondition()));
             long deadline = Timeouts.start(timeout, timeUnit);
             long remainingInMs = Timeouts.remaining(deadline);
 
             while (true) {
                 try {
-                    node.value.condition.await(remainingInMs, TimeUnit.MILLISECONDS);
+                    request.value.condition.await(remainingInMs, TimeUnit.MILLISECONDS);
                 } catch (InterruptedException e) {
-                    if (node.value.isDone) {
+                    if (request.value.isDone) {
                         // unable to give up
                         Thread.currentThread().interrupt();
                         return true;
                     }
                     // giving up
-                    q.remove(node);
+                    q.remove(request);
                     completeRequests();
                     throw e;
                 }
 
                 // is request fulfilled (i.e. isDone)
-                if (node.value.isDone) {
+                if (request.value.isDone) {
                     // if isDone is true, then all the leave processing is already done
                     return true;
                 }
@@ -78,7 +78,7 @@ public class NarySemaphoreKS {
                 remainingInMs = Timeouts.remaining(deadline);
                 if (Timeouts.isTimeout(remainingInMs)) {
                     // giving up
-                    q.remove(node);
+                    q.remove(request);
                     completeRequests();
                     return false;
                 }
