@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Examples", "Examples\Examples.csproj", "{836E237C-3588-42D2-9415-682AAF791B2A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sketches", "Sketches\Sketches.csproj", "{1C74F25E-F23D-4B5F-919B-1960DB88B1C6}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{836E237C-3588-42D2-9415-682AAF791B2A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{836E237C-3588-42D2-9415-682AAF791B2A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{836E237C-3588-42D2-9415-682AAF791B2A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{836E237C-3588-42D2-9415-682AAF791B2A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1C74F25E-F23D-4B5F-919B-1960DB88B1C6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1C74F25E-F23D-4B5F-919B-1960DB88B1C6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1C74F25E-F23D-4B5F-919B-1960DB88B1C6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1C74F25E-F23D-4B5F-919B-1960DB88B1C6}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
