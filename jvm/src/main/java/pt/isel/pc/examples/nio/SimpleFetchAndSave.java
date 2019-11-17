@@ -60,11 +60,11 @@ public class SimpleFetchAndSave {
     public void start(String host, int port) throws IOException {
         logger.info("begin connect");
         asyncCall(() ->
-          socket.connect(new InetSocketAddress(host, port), null, onConnectComplete)
+          socket.connect(new InetSocketAddress(host, port), null, onConnectCompletedHandler)
         );
     }
 
-    private final CompletionHandler<Void, Object> onConnectComplete = handler(
+    private final CompletionHandler<Void, Object> onConnectCompletedHandler = handler(
       "connect",
       ignored -> onConnectCompleted(),
       this::onError);
@@ -82,65 +82,70 @@ public class SimpleFetchAndSave {
     }
 
     private void writeRequest(ByteBuffer requestBuffer) {
-        tryDo(() -> {
-            logger.info("begin write request");
-            asyncCall(() ->
-              socket.write(requestBuffer, null,
-                handler("write socket",
-                  res -> onWriteRequestCompleted(requestBuffer),
-                  this::onError))
-            );
-        });
+        logger.info("begin write request");
+        asyncCall(() ->
+          socket.write(requestBuffer, null,
+            handler("write socket",
+              res -> onWriteRequestCompleted(requestBuffer),
+              this::onError))
+        );
     }
-
     private void onWriteRequestCompleted(ByteBuffer requestBuffer) {
         if (requestBuffer.position() == requestBuffer.limit()) {
+            // request fully written, start read response
             readResponse();
         } else {
+            // continue writing request
             writeRequest(requestBuffer);
         }
     }
 
     private void readResponse() {
-        tryDo(() -> {
-            logger.info("begin read");
-            asyncCall(() ->
-              socket.read(buffer, null, onCompleteReadResponse)
-            );
-        });
+        logger.info("begin read");
+        asyncCall(() ->
+          socket.read(buffer, null, onReadResponseCompletedHandler)
+        );
     }
 
-    private final CompletionHandler<Integer, Object> onCompleteReadResponse = handler(
+    private final CompletionHandler<Integer, Object> onReadResponseCompletedHandler = handler(
       "read socket",
       this::onReadResponseCompleted,
       this::onError);
-
     private void onReadResponseCompleted(int result) {
         if (result != -1) {
             writeResponseToFile();
         } else {
-            handler.completed(null, null);
+            completeWithSuccess();
         }
     }
 
     private void writeResponseToFile() {
-        tryDo(() -> {
-            buffer.flip();
-            asyncCall(() ->
-              file.write(buffer, filePosition, null, onWriteFileComplete)
-            );
-        });
+        buffer.flip();
+        asyncCall(() ->
+          file.write(buffer, filePosition, null, onWriteFileCompletedHandler)
+        );
     }
 
-    private final CompletionHandler<Integer, Object> onWriteFileComplete = handler(
+    private final CompletionHandler<Integer, Object> onWriteFileCompletedHandler = handler(
       "write socket",
-      this::onWriteToFileCompleted,
+      this::onWriteFileCompleted,
       this::onError);
-
-    private void onWriteToFileCompleted(int len) {
+    private void onWriteFileCompleted(int len) {
         buffer.clear();
         filePosition += len;
         readResponse();
+    }
+
+    private void completeWithSuccess() {
+        try{
+            socket.close();
+            file.close();
+            handler.completed(null, null);
+        } catch (IOException e) {
+            closeSilently(socket);
+            closeSilently(file);
+            handler.failed(e, null);
+        }
     }
 
     // utils below
@@ -198,7 +203,7 @@ public class SimpleFetchAndSave {
             public void completed(T result, Object attachment) {
                 logger.info("Completed {} with sucess: {}", operation, result);
                 checkReentrancy();
-                onSuccess.accept(result);
+                tryDo(() -> onSuccess.accept(result));
             }
 
             @Override
