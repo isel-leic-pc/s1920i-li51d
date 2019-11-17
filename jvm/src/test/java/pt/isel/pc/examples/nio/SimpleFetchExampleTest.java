@@ -5,16 +5,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
-import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.SocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.channels.AsynchronousFileChannel;
-import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.concurrent.Semaphore;
 
 public class SimpleFetchExampleTest {
@@ -53,7 +46,7 @@ public class SimpleFetchExampleTest {
     public void asynchronousFetch() throws IOException, InterruptedException {
         Semaphore done = new Semaphore(0);
 
-        fetchAndSaveAsync("httpbin.org", 80, "output.txt",
+        SimpleFetchAndSave.run("httpbin.org", 80, "/get", "output.txt",
           new CompletionHandler<Void, Object>() {
 
               @Override
@@ -72,34 +65,5 @@ public class SimpleFetchExampleTest {
         done.acquire();
         log.info("end");
     }
-
-    private void fetchAndSaveAsync(
-      String host, int port, String fileName,
-      CompletionHandler<Void, Object> fetchAndSaveCompletionHandler) throws IOException {
-
-        AsynchronousSocketChannel socket = AsynchronousSocketChannel.open();
-        AsynchronousFileChannel file = AsynchronousFileChannel.open(Paths.get(fileName));
-
-        socket.connect(new InetSocketAddress(host, port), null, new CompletionHandler<Void, Object>() {
-            @Override
-            public void completed(Void result, Object attachment) {
-                String requestString =
-                  "GET https://httpbin.org/delay/3 HTTP/1.1\r\n"
-                    + "User-Agent: Me\r\nHost: httpbin.org\r\nConnection: close\r\n"
-                    + "\r\n";
-
-                byte[] requestBytes = requestString.getBytes(StandardCharsets.UTF_8);
-                ByteBuffer requestBuffer = ByteBuffer.wrap(requestBytes);
-                socket.write(requestBuffer, null, new CompletionHandler<Integer, Object>() {
-                }
-            }
-
-            @Override
-            public void failed(Throwable exc, Object attachment) {
-                fetchAndSaveCompletionHandler.failed(exc, null);
-            }
-        });
-    }
-
 
 }
