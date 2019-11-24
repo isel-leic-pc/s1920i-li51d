@@ -18,9 +18,9 @@ import java.util.function.Consumer;
 import static java.nio.file.StandardOpenOption.CREATE;
 import static java.nio.file.StandardOpenOption.WRITE;
 
-public final class SimpleFetchAndSave {
+public final class ParallelFetchAndSave {
 
-    private static final Logger logger = LoggerFactory.getLogger(SimpleFetchAndSave.class);
+    private static final Logger logger = LoggerFactory.getLogger(ParallelFetchAndSave.class);
     private final ByteBuffer buffer;
     private final AsynchronousSocketChannel socket;
     private final AsynchronousFileChannel file;
@@ -31,7 +31,7 @@ public final class SimpleFetchAndSave {
 
     private int filePosition = 0;
 
-    private SimpleFetchAndSave(
+    private ParallelFetchAndSave(
       AsynchronousSocketChannel socket,
       AsynchronousFileChannel file,
       String path,
@@ -53,7 +53,7 @@ public final class SimpleFetchAndSave {
         socket.setOption(StandardSocketOptions.SO_SNDBUF, 16);
         AsynchronousFileChannel file = AsynchronousFileChannel.open(Paths.get(fileName),
           WRITE, CREATE);
-        SimpleFetchAndSave fas = new SimpleFetchAndSave(socket, file, path, handler);
+        ParallelFetchAndSave fas = new ParallelFetchAndSave(socket, file, path, handler);
         fas.start(host, port);
     }
 
@@ -103,46 +103,24 @@ public final class SimpleFetchAndSave {
 
     private void readResponse() {
         logger.info("begin read");
-        asyncCall(() ->
-          socket.read(buffer, null, onReadResponseCompletedHandler)
-        );
+        CopyPump.run(
+          (buf, handler) -> socket.read(buf, null, handler),
+          (buf, filePosition, handler) -> write(buf, filePosition, handler),
+          onCopyCompletedHandler);
     }
 
-    private final CompletionHandler<Integer, Object> onReadResponseCompletedHandler = handler(
-      "read socket",
-      this::onReadResponseCompleted,
-      this::onError);
-
-    private void onReadResponseCompleted(int result) {
-        if (result != -1) {
-            writeResponseToFile();
-        } else {
-            completeWithSuccess();
+    private void write(ByteBuffer buf, int filePosition,
+                       CompletionHandler<Integer, Object> handler) {
+        if (filePosition > 10) {
+            handler.failed(new Exception("to test error handler"), null);
         }
+        file.write(buf, filePosition, null, handler);
     }
 
-    private void writeResponseToFile() {
-        buffer.flip();
-        logger.info("begin write to file");
-        if(filePosition == 10) {
-            logger.warn("throwing exception");
-            throw new RuntimeException("I don't like this position");
-        }
-        asyncCall(() ->
-          file.write(buffer, filePosition, null, onWriteFileCompletedHandler)
-        );
-    }
-
-    private final CompletionHandler<Integer, Object> onWriteFileCompletedHandler = handler(
-      "write file",
-      this::onWriteFileCompleted,
+    private final CompletionHandler<Integer, Object> onCopyCompletedHandler = handler(
+      "copy",
+      it -> completeWithSuccess(),
       this::onError);
-
-    private void onWriteFileCompleted(int len) {
-        buffer.clear();
-        filePosition += len;
-        readResponse();
-    }
 
     private void completeWithSuccess() {
         try {

@@ -10,9 +10,9 @@ import java.nio.channels.CompletionHandler;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Semaphore;
 
-public class SimpleFetchExampleTest {
+public class FetchExampleTest {
 
-    private static final Logger log = LoggerFactory.getLogger(SimpleFetchExampleTest.class);
+    private static final Logger log = LoggerFactory.getLogger(FetchExampleTest.class);
 
     @Test
     public void synchronousFetch() throws IOException {
@@ -43,10 +43,34 @@ public class SimpleFetchExampleTest {
     }
 
     @Test
-    public void asynchronousFetch() throws IOException, InterruptedException {
+    public void simpleAsynchronousFetch() throws IOException, InterruptedException {
         Semaphore done = new Semaphore(0);
 
         SimpleFetchAndSave.run("httpbin.org", 80, "/get", "output.txt",
+          new CompletionHandler<Void, Object>() {
+
+              @Override
+              public void completed(Void result, Object attachment) {
+                  log.info("fetch and save completed with success");
+                  done.release();
+              }
+
+              @Override
+              public void failed(Throwable exc, Object attachment) {
+                  log.info("fetch and save completed with error", exc);
+                  done.release();
+              }
+          });
+
+        done.acquire();
+        log.info("end");
+    }
+
+    @Test
+    public void parallelAsynchronousFetchTest() throws IOException, InterruptedException {
+        Semaphore done = new Semaphore(0);
+
+        ParallelFetchAndSave.run("httpbin.org", 80, "/get", "output.txt",
           new CompletionHandler<Void, Object>() {
 
               @Override
