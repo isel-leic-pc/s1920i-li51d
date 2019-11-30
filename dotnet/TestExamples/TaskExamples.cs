@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
+using Xunit.Sdk;
 
 namespace TestExamples
 {
@@ -16,9 +17,10 @@ namespace TestExamples
         public void HttpGetBlockingExample()
         {
             var client = new HttpClient();
+            Log("Before GetAsync");
             var task0 = client.GetAsync("https://httpbin.org/delay/2");
             Log("Before calling task0.Result");
-            var response = task0.Result; // This blocks the threads for ~2 seconds, while the response is not available
+            var response = task0.Result; // This blocks the thread for ~2 seconds, while the response is not available
             Log($"Response={response}");
         }
 
@@ -29,6 +31,7 @@ namespace TestExamples
         public void HttpGetContinueWithExample()
         {
             var client = new HttpClient();
+            Log("Before GetAsync");
             var task0 = client.GetAsync("https://httpbin.org/delay/2");
             var task1 = task0.ContinueWith(task =>
             {
@@ -109,9 +112,9 @@ namespace TestExamples
                     var response = task.Result; // This will throw because task completed with exception
                     Log($"Response={response}");
                 }
-                catch (Exception e)
+                catch (AggregateException e)
                 {
-                    Log($"Exception caught: {e.Message}");
+                    Log($"Exception caught: {e.InnerException.GetType().Name} - {e.InnerException.Message}");
                 }
 
                 return 42;
@@ -125,6 +128,37 @@ namespace TestExamples
             // This way the test will only be considered completed with the returned task completes
             Log("Returning from test method");
             return task2;
+        }
+
+        [Fact]
+        public Task HttpGetWithErrorsAndChaining2()
+        {
+            var client = new HttpClient();
+            var task0 = client.GetAsync("https://httpbin2.org/delay/2");
+            var task1 = task0.ContinueWith(task =>
+            {
+                Log($"task status is: {task.Status}");
+                Log($"task exception type is: {task.Exception.InnerException.GetType().Name}");
+                Log("Before calling task0.Result");
+                return task.Result;
+            });
+            var task2 = task1.ContinueWith(task =>
+            {
+                Log($"task status is: {task.Status}");
+                Log($"task exception type is: {task.Exception.InnerException.GetType().Name}");
+                Log("Before calling task0.Result");
+                return task.Result;
+            });
+            var task3 = task2.ContinueWith(task =>
+            {
+                Log($"task status is: {task.Status}");
+                Log($"task exception type is: {task.Exception.InnerException.InnerException.GetType().Name}");
+                Log($"Flattened exception type is: {task.Exception.Flatten().InnerException.GetType().Name}");
+            });
+
+            // This way the test will only be considered completed with the returned task completes
+            Log("Returning from test method");
+            return task3;
         }
 
         [Fact]
@@ -189,15 +223,13 @@ namespace TestExamples
                 {
                     Log($"task status is: {task.Status}");
                     Log($"task result is: {task.Result}");
-
                 });
-            
+
             Log("Returning from test method");
             return finalTask;
         }
 
         [Fact]
-
         public Task UsingAsyncMethods()
         {
             /*
@@ -208,9 +240,9 @@ namespace TestExamples
             async Task<string> Get()
             {
                 var client = new HttpClient();
-                var task1 = client.GetAsync("https://httpbin.org/delay/1");
+                Task<HttpResponseMessage> task1 = client.GetAsync("https://httpbin.org/delay/3");
                 Log("after GetAsync");
-                var response = await task1;
+                HttpResponseMessage response = await task1; // await: Task<A> -> A, *without* blocking
                 Log($"after await, response={response}");
                 var task2 = response.Content.ReadAsStringAsync();
                 string body = await task2;
@@ -221,13 +253,57 @@ namespace TestExamples
             var task = Get();
             Log("returning from test method");
             return task;
-            
+
             /*
              * Looking at the log trace, notice:
              * - How the `Get` method returns *before* some of its methods are executed
              * - How the `Get` statements, which are inside the *same* block, are executed in *different* threads
              */
-        } 
+        }
+
+        [Fact]
+        public void AsyncMethodsAndExceptions()
+        {
+            async Task AsyncMethodThatThrows()
+            {
+                throw new Exception("exception thrown inside async method");
+            }
+           
+            Log("before AsyncMethodThatThrows");
+            Task res = AsyncMethodThatThrows();
+            Log("after AsyncMethodThatThrows");
+            // NO exception is thrown in the line above
+            // however the task in the exception state
+            Assert.Equal(TaskStatus.Faulted, res.Status);
+            var exception  = Assert.Throws<AggregateException>(() => res.Wait());
+            Assert.Equal("exception thrown inside async method", exception.InnerException.Message);
+        }
+        
+        [Fact]
+        async public Task ParallelExecution()
+        {
+            async Task ParallelHttpGet()
+            {
+                Log("ParallelHttpGet begin");
+                var client = new HttpClient();
+                var x = client.GetAsync("https://httpbin.org/delay/4");
+                var y = client.GetAsync("https://httpbin.org/delay/4");
+                Log($"status 1 = {(await x).StatusCode}, status 2 = {(await y).StatusCode}");
+            }
+            async Task SequentialHttpGet()
+            {
+                Log("SequentialHttpGet begin");
+                var client = new HttpClient();
+                var x = await client.GetAsync("https://httpbin.org/delay/4");
+                var y = await client.GetAsync("https://httpbin.org/delay/4");
+                Log($"status 1 = {x.StatusCode}, status 2 = {y.StatusCode}");
+            }
+
+            
+            await ParallelHttpGet();
+            await SequentialHttpGet();
+            
+        }
 
         private readonly ITestOutputHelper _output;
 
